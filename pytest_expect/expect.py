@@ -16,7 +16,6 @@ import sys
 
 import pytest
 import umsgpack
-from six import PY2, PY3, text_type, binary_type
 
 _magic_file_line = b"pytest-expect file v"
 
@@ -88,9 +87,7 @@ class ExpectationPlugin(object):
 
         # parse Python version line
         try:
-            line = next(fp)
-            if PY3:
-                line = line.decode("ascii")
+            line = next(fp).decode("ascii")
             version_info = ast.literal_eval(line)
             major, minor, micro, releaselevel, serial = version_info
         except (StopIteration, ValueError):
@@ -100,8 +97,7 @@ class ExpectationPlugin(object):
         if version == 1:
             fails = set()
             for line in fp:
-                if PY3:
-                    line = line.decode("ascii")
+                line = line.decode("ascii")
                 try:
                     name, result = line.rsplit(":", 1)
                 except ValueError:
@@ -110,15 +106,10 @@ class ExpectationPlugin(object):
                     raise SyntaxError("invalid pytest-expect file")
                 name = ast.literal_eval(name)
                 fails.add(name)
-                if PY3 and major == 2 and isinstance(name, bytes):
+                if major == 2 and isinstance(name, bytes):
                     try:
                         fails.add(name.decode("latin1"))
                     except UnicodeDecodeError:
-                        pass
-                if PY2 and major == 3 and isinstance(name, unicode):
-                    try:
-                        fails.add(name.encode("latin1"))
-                    except UnicodeEncodeError:
                         pass
             return fails
         else:
@@ -129,22 +120,20 @@ class ExpectationPlugin(object):
         yield repr(tuple(sys.version_info)) + "\n"
         for fail in sorted(fails):
             r = repr(fail)
-            if PY2 and isinstance(fail, str):
-                r = "b" + r
-            elif PY3 and isinstance(fail, str):
+            if isinstance(fail, str):
                 r = "u" + r
             yield "%s: FAIL\n" % r
 
     def _make_file(self, fp, fails):
         for line in self._raw_make_file(fails):
-            if isinstance(line, text_type):
+            if isinstance(line, str):
                 line = line.encode("ascii")
             fp.write(line)
 
     def _parse_legacy_file(self, fp):
         state = umsgpack.unpack(fp)
 
-        if PY3 and b'py_version' in state:
+        if b'py_version' in state:
             for key in list(state.keys()):
                 state[key.decode("ASCII")] = state[key]
                 del state[key]
@@ -160,13 +149,8 @@ class ExpectationPlugin(object):
             xfail = state["expect_xfail"]
             for s in xfail:
                 fails.add(s)
-                if PY3 and py_version == 2 and isinstance(s, binary_type):
+                if py_version == 2 and isinstance(s, bytes):
                     fails.add(s.decode('latin1'))
-                elif PY2 and py_version == 3 and isinstance(s, text_type):
-                    try:
-                        fails.add(s.encode("latin1"))
-                    except UnicodeEncodeError:
-                        pass
         else:
             self.config.warn("W1", "test expectation file in unsupported version")
         return fails
